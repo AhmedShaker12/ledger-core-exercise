@@ -13,3 +13,7 @@ Project environment setup, empty markdown for notes added
 ## 2026-11-22 22:14, Pen-and-Paper done (offline, no commits)
 
 Pen-and-Paper running of the ledger is done, edits to markdown coming next
+
+## 2026-11-23 00:02, Finalizing constraints and criteria (no commits)
+
+Going over the criteria, deciding what's rejected, ambiguous, emits a warning...etc. before going for markdowns
