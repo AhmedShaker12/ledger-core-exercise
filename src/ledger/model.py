@@ -97,6 +97,10 @@ class BookingDayBackwards(LedgerError):
     pass
 
 
+class AuthorizationNotActive(LedgerError):
+    pass
+
+
 def fmt(amount: int, currency: str) -> str:
     places = PRECISION[currency]
     whole, frac = divmod(abs(amount), 10**places)

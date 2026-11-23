@@ -1,5 +1,6 @@
 from ledger.config import ACCOUNTS, DAYS, FEE_AMOUNT, FEE_CURRENCY, RATE_BP
 from ledger.model import (
+    AuthorizationNotActive,
     BookingDayBackwards,
     Category,
     Cell,
@@ -123,6 +124,16 @@ class Ledger:
         if ev.booking_day < last:
             raise BookingDayBackwards(f"booking day {ev.booking_day} after day {last}")
         check_currency(ev.account, ev.currency)
+        # All refusals come before any day is closed or the clock moves.
+        if ev.type is EventType.SETTLEMENT:
+            self._check_settleable(ev)
+        originals = [
+            e
+            for e in self.entries
+            if e.event_id == ev.reverses and e.category is Category.POSTED
+        ]
+        if ev.type is EventType.REVERSAL and not originals:
+            raise LedgerError(f"nothing to reverse for {ev.reverses}")
         self.close_through(ev.account, ev.booking_day - 1)
         self.clock[ev.account] = ev.booking_day
         days = (ev.booking_day, ev.value_day)
@@ -160,16 +171,18 @@ class Ledger:
                 msg = f"{ev.event_id}: posted, no active authorization {ev.auth_id}"
                 self.warnings.append((ev.booking_day, ev.account, msg))
         else:
-            originals = [
-                e
-                for e in self.entries
-                if e.event_id == ev.reverses and e.category is Category.POSTED
-            ]
-            if not originals:
-                raise LedgerError(f"nothing to reverse for {ev.reverses}")
             for e in originals:
                 opposite = CR if e.direction is DR else DR
                 post(e.amount, opposite, Kind.REVERSAL, str(e.entry_id))
+
+    def _check_settleable(self, ev: Event) -> None:
+        """A declined or already settled authorization cannot be settled.
+        An unknown one can: it posts with a warning."""
+        state = self.auth_states(ev.account, ev.booking_day).get(ev.auth_id or "")
+        if state == "DECLINED":
+            raise AuthorizationNotActive(f"{ev.auth_id} declined")
+        if state == "SETTLED":
+            raise AuthorizationNotActive(f"{ev.auth_id} already settled")
 
     def _active_hold(self, account: str, auth_id: str | None) -> Entry | None:
         linked = [e for e in self.entries if e.account == account and e.ref == auth_id]

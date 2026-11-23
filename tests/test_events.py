@@ -65,6 +65,36 @@ def test_refusals_post_nothing() -> None:
     assert [msg.split(":")[0] for _, _, msg in led.errors] == ["E2", "E3", "E4"]
 
 
+def test_settlement_on_declined_auth_refused() -> None:
+    led = Ledger()
+    led.apply(ev("E1", T.AUTHORIZATION, 5, 9000, auth_id="Auth-B"))
+    led.apply(ev("E2", T.SETTLEMENT, 6, 9000, auth_id="Auth-B"))
+    assert [e.kind for e in led.entries] == [Kind.AUTH_DECLINED]
+    assert led.errors == [(6, "ACC-001", "E2: Auth-B declined")]
+    assert led.clock["ACC-001"] == 5
+
+
+def test_settlement_on_settled_auth_refused() -> None:
+    led = Ledger()
+    led.apply(ev("E1", T.CREDIT, 1, 25000))
+    led.apply(ev("E2", T.AUTHORIZATION, 2, 20000, auth_id="Auth-A"))
+    led.apply(ev("E3", T.SETTLEMENT, 4, 18500, auth_id="Auth-A"))
+    count = len(led.entries)
+    led.apply(ev("E4", T.SETTLEMENT, 5, 18500, auth_id="Auth-A"))
+    assert len(led.entries) == count
+    assert led.errors == [(5, "ACC-001", "E4: Auth-A already settled")]
+    assert led.clock["ACC-001"] == 4 and led.closed["ACC-001"] == 3
+
+
+def test_refused_reversal_leaves_clock() -> None:
+    led = Ledger()
+    led.apply(ev("E1", T.CREDIT, 1, 100))
+    led.apply(ev("E2", T.REVERSAL, 5, 0, reverses="E99"))
+    assert (led.clock["ACC-001"], led.closed.get("ACC-001", 0)) == (1, 0)
+    led.apply(ev("E3", T.CREDIT, 3, 100))  # accepted: the refusal moved nothing
+    assert [msg.split(":")[0] for _, _, msg in led.errors] == ["E2"]
+
+
 def test_ledger_ignores_memo() -> None:
     led = Ledger()
     led.apply(ev("E1", T.CREDIT, 1, 1000))
