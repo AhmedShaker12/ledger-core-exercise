@@ -1,4 +1,4 @@
-.PHONY: install fmt lint typecheck test check
+.PHONY: install fmt lint typecheck test check run
 
 install:
 	uv sync --locked
@@ -18,3 +18,6 @@ test:
 	uv run pytest
 
 check: lint typecheck test
+
+run:
+	uv run python -m ledger.replay
