@@ -154,7 +154,7 @@ class Ledger:
             remainder = ev.amount - part * ev.instalments
             for i in range(ev.instalments):
                 last_one = i == ev.instalments - 1
-                post(part + remainder * last_one, direction, kind, None)
+                post(part + (remainder if last_one else 0), direction, kind, None)
         elif ev.type is EventType.AUTHORIZATION:
             available = self.available(ev.account, ev.value_day, ev.booking_day)
             if available - ev.amount >= 0:
@@ -237,7 +237,10 @@ class Ledger:
         fees = [
             e
             for e in self.entries
-            if e.account == account and e.value_day == n and e.kind in FEE_KINDS
+            if e.account == account
+            and e.value_day == n
+            and e.kind in FEE_KINDS
+            and e.booking_day <= k
         ]
         net = -sum(e.signed for e in fees)
         diff = fee_due - net

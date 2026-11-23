@@ -29,3 +29,11 @@ Rejections, ambiguities and numbers (what goes into the markdown) are now consol
 ## 2026-11-23 11:35, Initial implementation and tests
 
 Initial code implementation as per the design as well as the tests are done. The markdown docs are next.
+
+## 2026-11-23 13:15, Fix code issues before final review
+
+Code issues are fixed, ready for final review
+
+## 2026-11-23 14:55, Markdowns done (committed)
+
+Markdowns are ready, code is under review
