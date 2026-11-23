@@ -37,3 +37,7 @@ Code issues are fixed, ready for final review
 ## 2026-11-23 14:55, Markdowns done (committed)
 
 Markdowns are ready, code is under review
+
+## 2026-11-23, 15:10, Code review complete
+
+Code review is complete and part 1 is done
