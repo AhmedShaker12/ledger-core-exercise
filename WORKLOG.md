@@ -25,3 +25,7 @@ Code design is finalized, not yet documented
 ## 2026-11-23 10:55, Consolidated rejections, ambiguities and numbers (no commits)
 
 Rejections, ambiguities and numbers (what goes into the markdown) are now consolidated
+
+## 2026-11-23 11:35, Initial implementation and tests
+
+Initial code implementation as per the design as well as the tests are done. The markdown docs are next.
