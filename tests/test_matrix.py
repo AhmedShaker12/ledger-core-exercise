@@ -48,6 +48,16 @@ def test_back_dated_entry_restates_later_days() -> None:
     assert m[(3, 4)].fee == 2500
 
 
+def test_finish_capitalizes_rounded_accruals() -> None:
+    led = Ledger()
+    led.apply(credit("E1", 1, 1, 28500))
+    led.finish()
+    interest = [e for e in led.entries if e.kind is Kind.INTEREST]
+    assert [(e.amount, e.booking_day, e.value_day) for e in interest] == [(66, 6, 6)]
+    assert led.ledger_balance("ACC-001", 6, 6) == 28566
+    assert led.closed == {"ACC-001": 6, "ACC-002": 6}
+
+
 def test_daily_interest_rounds_half_up_on_positive_only() -> None:
     assert daily_interest(28500) == 11  # 11.4
     assert daily_interest(12500) == 5  # 5.0

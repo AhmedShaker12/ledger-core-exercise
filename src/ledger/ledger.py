@@ -1,4 +1,4 @@
-from ledger.config import ACCOUNTS, FEE_AMOUNT, FEE_CURRENCY, RATE_BP
+from ledger.config import ACCOUNTS, DAYS, FEE_AMOUNT, FEE_CURRENCY, RATE_BP
 from ledger.model import (
     BookingDayBackwards,
     Category,
@@ -176,6 +176,22 @@ class Ledger:
         if any(e.kind is Kind.HOLD_RELEASED for e in linked):
             return None
         return next((e for e in linked if e.kind is Kind.HOLD_PLACED), None)
+
+    def finish(self) -> None:
+        """Close every account through the last day, then capitalize interest.
+
+        The credit is the sum of the already rounded daily accruals in the final
+        column, so the accruals sum exactly to the capitalized total. The base is
+        the last day's closing before this credit."""
+        for account, currency in ACCOUNTS.items():
+            self.close_through(account, DAYS)
+            column = [self.matrix[account][(n, DAYS)] for n in range(1, DAYS + 1)]
+            total = sum(cell.interest for cell in column)
+            if total:
+                days = (DAYS, DAYS)
+                self._append(
+                    f"CLOSE-D{DAYS}", account, currency, total, CR, Kind.INTEREST, days
+                )
 
     def close_through(self, account: str, day: int) -> None:
         for k in range(self.closed.get(account, 0) + 1, day + 1):
