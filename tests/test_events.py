@@ -47,11 +47,12 @@ def test_unknown_settlement_posts_with_warning() -> None:
 
 def test_reversal_posts_opposite_entry() -> None:
     led = Ledger()
+    led.apply(ev("E1", T.CREDIT, 1, 100000))
     led.apply(ev("E7", T.DEBIT, 5, 62000))
     led.apply(ev("E9", T.REVERSAL, 6, 0, reverses="E7"))
     rev = led.entries[-1]
-    assert (rev.kind, rev.amount, rev.ref) == (Kind.REVERSAL, 62000, "1")
-    assert led.ledger_balance("ACC-001", 6, 6) == 0
+    assert (rev.kind, rev.amount, rev.ref) == (Kind.REVERSAL, 62000, "2")
+    assert led.ledger_balance("ACC-001", 6, 6) == 100000
 
 
 def test_refusals_post_nothing() -> None:

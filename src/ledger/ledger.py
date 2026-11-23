@@ -1,7 +1,8 @@
-from ledger.config import ACCOUNTS
+from ledger.config import ACCOUNTS, FEE_AMOUNT, FEE_CURRENCY, RATE_BP
 from ledger.model import (
     BookingDayBackwards,
     Category,
+    Cell,
     CurrencyMismatch,
     Direction,
     Entry,
@@ -12,7 +13,13 @@ from ledger.model import (
 )
 
 CR, DR = Direction.CR, Direction.DR
+FEE_KINDS = (Kind.FEE, Kind.FEE_REFUND)
 Notice = tuple[int, str, str]  # (day, account, message)
+
+
+def daily_interest(closing: int) -> int:
+    """0.04% of a positive closing balance, rounded half-up to minor units."""
+    return (closing * RATE_BP + 5_000) // 10_000 if closing > 0 else 0
 
 
 def check_currency(account: str, currency: str) -> None:
@@ -26,6 +33,9 @@ class Ledger:
         self.errors: list[Notice] = []
         self.warnings: list[Notice] = []
         self.clock: dict[str, int] = {}  # last booking day per account
+        self.closed: dict[str, int] = {}  # last closed day per account
+        # matrix[account][(N, K)]: value day N as known at the end of day K.
+        self.matrix: dict[str, dict[tuple[int, int], Cell]] = {a: {} for a in ACCOUNTS}
 
     def _append(
         self,
@@ -113,6 +123,7 @@ class Ledger:
         if ev.booking_day < last:
             raise BookingDayBackwards(f"booking day {ev.booking_day} after day {last}")
         check_currency(ev.account, ev.currency)
+        self.close_through(ev.account, ev.booking_day - 1)
         self.clock[ev.account] = ev.booking_day
         days = (ev.booking_day, ev.value_day)
 
@@ -165,3 +176,61 @@ class Ledger:
         if any(e.kind is Kind.HOLD_RELEASED for e in linked):
             return None
         return next((e for e in linked if e.kind is Kind.HOLD_PLACED), None)
+
+    def close_through(self, account: str, day: int) -> None:
+        for k in range(self.closed.get(account, 0) + 1, day + 1):
+            self._close(account, k)
+            self.closed[account] = k
+
+    def _close(self, account: str, k: int) -> None:
+        """Compute column K top-down. A back-dated entry flows into every later day,
+        because each day starts from the previous day's closing, fee included."""
+        closing = 0  # opening balance
+        for n in range(1, k + 1):
+            pre_fee = closing + sum(
+                e.signed
+                for e in self.entries
+                if e.account == account
+                and e.category is Category.POSTED
+                and e.kind not in (*FEE_KINDS, Kind.INTEREST)
+                and e.value_day == n
+                and e.booking_day <= k
+            )
+            fee = self._reconcile_fee(account, n, k, FEE_AMOUNT if pre_fee < 0 else 0)
+            closing = pre_fee - fee
+            available = closing - self.holds(account, n, k)
+            cell = Cell(pre_fee, fee, closing, daily_interest(closing), available)
+            self.matrix[account][(n, k)] = cell
+
+    def _reconcile_fee(self, account: str, n: int, k: int, fee_due: int) -> int:
+        """Book the difference between the fee due for day N and the net fee already
+        booked for it: a fee, a refund, or nothing. Returns the net fee after."""
+        fees = [
+            e
+            for e in self.entries
+            if e.account == account and e.value_day == n and e.kind in FEE_KINDS
+        ]
+        net = -sum(e.signed for e in fees)
+        diff = fee_due - net
+        try:
+            if diff > 0:
+                self._append(
+                    f"CLOSE-D{k}", account, FEE_CURRENCY, diff, DR, Kind.FEE, (k, n)
+                )
+            elif diff < 0:
+                fee = next(e for e in reversed(fees) if e.kind is Kind.FEE)
+                ref = str(fee.entry_id)
+                self._append(
+                    f"CLOSE-D{k}",
+                    account,
+                    FEE_CURRENCY,
+                    -diff,
+                    CR,
+                    Kind.FEE_REFUND,
+                    (k, n),
+                    ref,
+                )
+        except CurrencyMismatch as err:
+            self.errors.append((k, account, f"fee for day {n}: {err}"))
+            return net
+        return fee_due
